@@ -1,7 +1,18 @@
 <template>
   <transition name="photo-wall">
-    <div v-if="visible" class="photo-wall-overlay">
-      <div id="photo-ball" class="photo-container">
+    <div 
+      v-if="visible" 
+      class="photo-wall-overlay"
+      @wheel.prevent="handleWheel"
+      @touchstart="handleTouchStart"
+      @touchmove.prevent="handleTouchMove"
+      @touchend="handleTouchEnd"
+    >
+      <div 
+        id="photo-ball" 
+        class="photo-container"
+        :style="containerStyle"
+      >
         <template v-for="(item, index) in items" :key="index">
           <img 
             v-if="item.type === 'photo'"
@@ -20,6 +31,10 @@
       
       <button class="close-btn" @click="close">×</button>
       
+      <div class="zoom-hint">
+        <span>滚轮/双指缩放</span>
+      </div>
+      
       <div class="photo-wall-title">
         <h2>美好回忆</h2>
         <p>2022 - 精彩瞬间</p>
@@ -33,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
   visible: {
@@ -84,6 +99,48 @@ const items = computed(() => {
 
 const previewVisible = ref(false)
 const previewUrl = ref('')
+
+const scale = ref(1)
+const minScale = 0.3
+const maxScale = 3
+
+let touchStartDistance = 0
+let touchStartScale = 1
+
+const containerStyle = computed(() => ({
+  transform: `scale(${scale.value})`
+}))
+
+const handleWheel = (e) => {
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  scale.value = Math.max(minScale, Math.min(maxScale, scale.value + delta))
+}
+
+const getTouchDistance = (touches) => {
+  if (touches.length < 2) return 0
+  const dx = touches[0].clientX - touches[1].clientX
+  const dy = touches[0].clientY - touches[1].clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+const handleTouchStart = (e) => {
+  if (e.touches.length === 2) {
+    touchStartDistance = getTouchDistance(e.touches)
+    touchStartScale = scale.value
+  }
+}
+
+const handleTouchMove = (e) => {
+  if (e.touches.length === 2 && touchStartDistance > 0) {
+    const currentDistance = getTouchDistance(e.touches)
+    const scaleChange = currentDistance / touchStartDistance
+    scale.value = Math.max(minScale, Math.min(maxScale, touchStartScale * scaleChange))
+  }
+}
+
+const handleTouchEnd = () => {
+  touchStartDistance = 0
+}
 
 const getPhotoStyle = (index) => {
   const styles = []
@@ -138,6 +195,12 @@ const closePreview = () => {
 const close = () => {
   emit('close')
 }
+
+watch(() => props.visible, (newVal) => {
+  if (newVal) {
+    scale.value = 1
+  }
+})
 </script>
 
 <style scoped>
@@ -150,6 +213,7 @@ const close = () => {
   background-color: #000000;
   z-index: 2000;
   overflow: hidden;
+  touch-action: none;
 }
 
 .photo-container {
@@ -160,6 +224,7 @@ const close = () => {
   height: 100vh;
   transform-style: preserve-3d;
   animation: rotate_Y 15s infinite linear;
+  transition: transform 0.1s ease-out;
 }
 
 .photo {
@@ -232,6 +297,19 @@ const close = () => {
 .close-btn:hover {
   background: rgba(255, 107, 107, 0.6);
   transform: rotate(90deg);
+}
+
+.zoom-hint {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8px 16px;
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  z-index: 3000;
+  pointer-events: none;
 }
 
 .photo-wall-title {
