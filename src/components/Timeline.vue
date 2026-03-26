@@ -15,11 +15,18 @@
           <div class="marker-ring"></div>
         </div>
         <div class="timeline-content">
-          <div class="timeline-year">{{ event.year }}</div>
+          <div class="timeline-header">
+            <div class="timeline-year">{{ event.year }}</div>
+            <div 
+              class="timeline-icon" 
+              :class="{ 'surprise-icon': event.hasSurprise }"
+              v-html="event.icon"
+              @click.stop="event.hasSurprise && triggerSurprise(event)"
+            ></div>
+          </div>
           <div class="timeline-title">{{ event.title }}</div>
           <div class="timeline-description">{{ event.description }}</div>
         </div>
-        <div class="timeline-icon" v-html="event.icon"></div>
       </div>
     </div>
 
@@ -27,7 +34,12 @@
       <div class="event-detail" v-if="selectedEvent" @click="selectedEvent = null">
         <div class="detail-card" @click.stop>
           <button class="close-detail" @click="selectedEvent = null">&times;</button>
-          <div class="detail-icon" v-html="selectedEvent.icon"></div>
+          <div 
+            class="detail-icon" 
+            :class="{ 'surprise-icon': selectedEvent.hasSurprise }"
+            v-html="selectedEvent.icon"
+            @click="selectedEvent.hasSurprise && triggerSurprise(selectedEvent)"
+          ></div>
           <h3>{{ selectedEvent.year }} - {{ selectedEvent.title }}</h3>
           <p>{{ selectedEvent.detail }}</p>
           <div class="detail-tags">
@@ -39,18 +51,25 @@
               {{ tag }}
             </span>
           </div>
+          <div v-if="selectedEvent.hasSurprise" class="surprise-hint">
+            <span>点击图标发现惊喜 ✨</span>
+          </div>
         </div>
       </div>
     </transition>
+
+    <PhotoWall v-model:visible="showPhotoWall" @close="showPhotoWall = false" />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import PhotoWall from './PhotoWall.vue'
 
 const timelineSection = ref(null)
 const visibleItems = ref([])
 const selectedEvent = ref(null)
+const showPhotoWall = ref(false)
 
 const timelineEvents = [
   {
@@ -97,9 +116,10 @@ const timelineEvents = [
     year: 2022,
     title: '人生新阶段',
     description: '迎接新的挑战',
-    detail: '进入人生的新阶段，面对新的环境和挑战。你展现出了惊人的适应能力和坚韧不拔的精神。',
+    detail: '进入人生的新阶段，面对新的环境和挑战。你展现出了惊人的适应能力和坚韧不拔的精神。点击庆祝图标，有一份特别的惊喜等着你！',
     icon: '&#127881;',
-    tags: ['挑战', '成长', '突破']
+    tags: ['挑战', '成长', '突破'],
+    hasSurprise: true
   },
   {
     year: 2026,
@@ -119,7 +139,6 @@ const handleScroll = () => {
 
   const rect = section.getBoundingClientRect()
   const sectionTop = rect.top
-  const sectionHeight = rect.height
 
   if (sectionTop < window.innerHeight * 0.8) {
     timelineEvents.forEach((_, index) => {
@@ -135,6 +154,13 @@ const handleScroll = () => {
 
 const showDetail = (event) => {
   selectedEvent.value = event
+}
+
+const triggerSurprise = (event) => {
+  if (event.hasSurprise) {
+    selectedEvent.value = null
+    showPhotoWall.value = true
+  }
 }
 
 onMounted(() => {
@@ -153,7 +179,7 @@ onUnmounted(() => {
   z-index: 10;
   padding: 80px 20px;
   min-height: 100vh;
-  background: linear-gradient(180deg, transparent 0%, rgba(26, 26, 46, 0.8) 30%, rgba(26, 26, 46, 0.9) 100%);
+  background: transparent;
 }
 
 .section-title {
@@ -191,7 +217,7 @@ onUnmounted(() => {
   width: 45%;
   padding: 20px;
   margin-bottom: 40px;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   border-radius: 15px;
   cursor: pointer;
   opacity: 0;
@@ -216,7 +242,7 @@ onUnmounted(() => {
 }
 
 .timeline-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
   transform: scale(1.02);
 }
 
@@ -279,42 +305,67 @@ onUnmounted(() => {
 
 .timeline-content {
   padding: 0 15px;
+  max-width: calc(100% - 60px);
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .timeline-year {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: #ffd700;
   font-family: 'Poppins', sans-serif;
-}
-
-.timeline-title {
-  font-size: 1.3rem;
-  color: white;
-  margin: 10px 0;
-  font-weight: 600;
-}
-
-.timeline-description {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.2;
+  word-break: break-word;
+  flex: 1;
 }
 
 .timeline-icon {
-  position: absolute;
-  top: 20px;
-  font-size: 1.5rem;
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: all 0.3s ease;
 }
 
-.timeline-item.left .timeline-icon {
-  right: 20px;
+.timeline-icon.surprise-icon {
+  cursor: pointer;
+  animation: iconGlow 2s ease-in-out infinite;
 }
 
-.timeline-item:not(.left) .timeline-icon {
-  left: 20px;
+.timeline-icon.surprise-icon:hover {
+  transform: scale(1.3);
+  filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8));
 }
 
-/* 详情卡片 */
+@keyframes iconGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(255, 215, 0, 1));
+  }
+}
+
+.timeline-title {
+  font-size: 1.2rem;
+  color: white;
+  margin: 8px 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.timeline-description {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
 .event-detail {
   position: fixed;
   top: 0;
@@ -363,6 +414,11 @@ onUnmounted(() => {
   animation: iconBounce 1s ease infinite;
 }
 
+.detail-icon.surprise-icon {
+  cursor: pointer;
+  animation: iconBounce 1s ease infinite, iconGlow 2s ease-in-out infinite;
+}
+
 @keyframes iconBounce {
   0%, 100% {
     transform: translateY(0);
@@ -403,6 +459,30 @@ onUnmounted(() => {
   color: #ffd700;
 }
 
+.surprise-hint {
+  margin-top: 20px;
+  text-align: center;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(78, 205, 196, 0.2));
+  border-radius: 30px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  animation: hintPulse 2s ease-in-out infinite;
+}
+
+.surprise-hint span {
+  color: #ffd700;
+  font-size: 0.9rem;
+}
+
+@keyframes hintPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+  }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;
@@ -419,14 +499,23 @@ onUnmounted(() => {
   }
 
   .timeline-item {
-    width: calc(100% - 50px);
-    margin-left: 50px !important;
+    width: calc(100% - 60px);
+    margin-left: 60px !important;
+    padding: 15px;
   }
 
   .timeline-item.left .timeline-marker,
   .timeline-item:not(.left) .timeline-marker {
     left: -10px;
     right: auto;
+  }
+
+  .timeline-item.left .timeline-icon,
+  .timeline-item:not(.left) .timeline-icon {
+    left: auto;
+    right: 10px;
+    top: 10px;
+    font-size: 1.2rem;
   }
 
   .timeline-item.left,
@@ -438,12 +527,28 @@ onUnmounted(() => {
     transform: translateX(0);
   }
 
+  .timeline-content {
+    max-width: calc(100% - 40px);
+  }
+
+  .timeline-header {
+    gap: 8px;
+  }
+
+  .timeline-year {
+    font-size: 1.4rem;
+  }
+
+  .timeline-icon {
+    font-size: 1.4rem;
+  }
+
   .section-title {
     font-size: 2rem;
   }
 
-  .timeline-year {
-    font-size: 1.8rem;
+  .timeline-title {
+    font-size: 1rem;
   }
 }
 </style>

@@ -2,13 +2,8 @@
   <div class="cake-wrapper">
     <div class="cake-container" ref="container">
       <canvas ref="canvas"></canvas>
-      <div class="cake-controls">
-        <button @click="toggleRotation" class="control-btn">
-          {{ isRotating ? '暂停旋转' : '开始旋转' }}
-        </button>
-        <button @click="celebrate" class="control-btn celebrate-btn">
-          庆祝一下
-        </button>
+      <div class="gesture-hint">
+        <p>🎂 滚动鼠标滚轮缩放 | 🖱️ 靠近或远离蛋糕</p>
       </div>
     </div>
   </div>
@@ -20,280 +15,281 @@ import * as THREE from 'three'
 
 const container = ref(null)
 const canvas = ref(null)
-const isRotating = ref(true)
 
 let scene, camera, renderer
-let cakeGroup, candles = []
+let cakeParticles, ringParticles
 let animationId
+let targetCameraZ = 12
+let currentCameraZ = 12
 
-const initScene = () => {
-  if (!container.value) return
+const initScene = async () => {
+  if (!container.value) {
+    console.error('Container not found!')
+    return
+  }
 
   const width = container.value.clientWidth
   const height = container.value.clientHeight
+  
   console.log('Cake container size:', width, height)
+
+  if (width === 0 || height === 0) {
+    console.error('Container has no size!')
+    return
+  }
 
   scene = new THREE.Scene()
   scene.background = null
 
   camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
-  camera.position.set(0, 2, 12)
-  camera.lookAt(0, 2, 0)
+  camera.position.set(0, 3, 12)
+  camera.lookAt(0, 3, 0)
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true })
   renderer.setSize(width, height)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setClearColor(0x000000, 0)
-  renderer.shadowMap.enabled = true
+  
+  console.log('Renderer initialized')
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
-  scene.add(ambientLight)
+  // 创建圆形纹理
+  const sprite = createCircleSprite()
 
-  const spotLight = new THREE.SpotLight(0xffffff, 2)
-  spotLight.position.set(0, 20, 10)
-  spotLight.castShadow = true
-  scene.add(spotLight)
+  createCakeParticles(sprite)
+  createRingParticles(sprite)
+  createCandles(sprite)
+  
+  console.log('Particles created')
 
-  const pointLight1 = new THREE.PointLight(0xff69b4, 1, 30)
-  pointLight1.position.set(-8, 5, -5)
-  scene.add(pointLight1)
-
-  const pointLight2 = new THREE.PointLight(0x4ecdc4, 1, 30)
-  pointLight2.position.set(8, 5, 5)
-  scene.add(pointLight2)
-
-  createCake()
+  // 添加鼠标滚轮事件监听
+  canvas.value.addEventListener('wheel', handleWheel)
+  
   animate()
+  
+  console.log('Animation started')
 }
 
-const createCake = () => {
-  cakeGroup = new THREE.Group()
-
-  const platformGeometry = new THREE.CylinderGeometry(4, 4.2, 0.5, 32)
-  const platformMaterial = new THREE.MeshStandardMaterial({
-    color: 0x8b4513,
-    roughness: 0.6
-  })
-  const platform = new THREE.Mesh(platformGeometry, platformMaterial)
-  platform.position.y = 0.25
-  platform.receiveShadow = true
-  cakeGroup.add(platform)
-
-  const baseGeometry = new THREE.CylinderGeometry(3.5, 3.8, 2, 32)
-  const baseMaterial = new THREE.MeshStandardMaterial({
-    color: 0xff69b4,
-    roughness: 0.4,
-    metalness: 0.1
-  })
-  const base = new THREE.Mesh(baseGeometry, baseMaterial)
-  base.position.y = 1.5
-  base.castShadow = true
-  cakeGroup.add(base)
-
-  const frostingGeometry = new THREE.TorusGeometry(3.5, 0.15, 8, 32)
-  const frostingMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffe66d,
-    emissiveIntensity: 0.3
-  })
-  const frosting = new THREE.Mesh(frostingGeometry, frostingMaterial)
-  frosting.position.y = 2.5
-  frosting.rotation.x = Math.PI / 2
-  cakeGroup.add(frosting)
-
-  const secondGeometry = new THREE.CylinderGeometry(2.5, 2.8, 1.8, 32)
-  const secondMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffb6c1,
-    roughness: 0.4
-  })
-  const second = new THREE.Mesh(secondGeometry, secondMaterial)
-  second.position.y = 3.4
-  second.castShadow = true
-  cakeGroup.add(second)
-
-  const frosting2 = new THREE.Mesh(
-    new THREE.TorusGeometry(2.5, 0.12, 8, 32),
-    frostingMaterial
-  )
-  frosting2.position.y = 4.3
-  frosting2.rotation.x = Math.PI / 2
-  cakeGroup.add(frosting2)
-
-  const topGeometry = new THREE.CylinderGeometry(1.5, 1.8, 1.5, 32)
-  const topMaterial = new THREE.MeshStandardMaterial({
-    color: 0xff6b6b,
-    roughness: 0.4
-  })
-  const top = new THREE.Mesh(topGeometry, topMaterial)
-  top.position.y = 4.85
-  top.castShadow = true
-  cakeGroup.add(top)
-
-  const frosting3 = new THREE.Mesh(
-    new THREE.TorusGeometry(1.5, 0.1, 8, 32),
-    frostingMaterial
-  )
-  frosting3.position.y = 5.6
-  frosting3.rotation.x = Math.PI / 2
-  cakeGroup.add(frosting3)
-
-  createNumber()
-  createCandles()
-
-  scene.add(cakeGroup)
+// 创建圆形精灵纹理
+const createCircleSprite = () => {
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const ctx = canvas.getContext('2d')
+  
+  // 创建径向渐变
+  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
+  gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)')
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+  
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, 64, 64)
+  
+  const texture = new THREE.CanvasTexture(canvas)
+  return texture
 }
 
-const createNumber = () => {
-  const textMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffd700,
-    roughness: 0.2,
-    metalness: 0.9,
-    emissive: 0xffd700,
-    emissiveIntensity: 0.6
-  })
+const createCakeParticles = (sprite) => {
+  const particleCount = 30000
+  const positions = new Float32Array(particleCount * 3)
+  const colors = new Float32Array(particleCount * 3)
+  const sizes = new Float32Array(particleCount)
 
-  const twoShape = new THREE.Shape()
-  twoShape.moveTo(-0.6, 0)
-  twoShape.absarc(-0.3, 0.3, 0.3, Math.PI, 0, true)
-  twoShape.lineTo(0, 0)
-  twoShape.lineTo(0, -0.15)
-  twoShape.lineTo(-0.3, -0.15)
-  twoShape.absarc(-0.3, -0.3, 0.3, 0, Math.PI, false)
-  twoShape.lineTo(-0.6, 0)
-
-  const twoGeometry = new THREE.ExtrudeGeometry(twoShape, {
-    depth: 0.2,
-    bevelEnabled: true,
-    bevelThickness: 0.05,
-    bevelSize: 0.05
-  })
-  const two = new THREE.Mesh(twoGeometry, textMaterial)
-  two.position.set(-1.2, 5.8, 0)
-  two.scale.set(1.3, 1.3, 1.3)
-  cakeGroup.add(two)
-
-  const zeroGeometry = new THREE.TorusGeometry(0.4, 0.15, 16, 32)
-  const zero = new THREE.Mesh(zeroGeometry, textMaterial)
-  zero.position.set(0.3, 6, 0)
-  zero.scale.set(1.2, 1.4, 0.8)
-  cakeGroup.add(zero)
-}
-
-const createCandles = () => {
-  const positions = [
-    { x: -1.5, z: 0 },
-    { x: -0.8, z: 1 },
-    { x: 0.8, z: 1 },
-    { x: 1.5, z: 0 }
+  const pinkColors = [
+    new THREE.Color(0xff69b4),
+    new THREE.Color(0xff1493),
+    new THREE.Color(0xffb6c1),
+    new THREE.Color(0xff6b6b),
+    new THREE.Color(0xffd700),
+    new THREE.Color(0xee82ee)
   ]
 
-  positions.forEach((pos, index) => {
-    const candleGroup = new THREE.Group()
+  for (let i = 0; i < particleCount; i++) {
+    const layer = Math.floor(Math.random() * 3)
+    const angle = Math.random() * Math.PI * 2
+    const spread = Math.random()
 
-    const candleGeometry = new THREE.CylinderGeometry(0.08, 0.1, 1, 16)
-    const candleMaterial = new THREE.MeshStandardMaterial({
-      color: index % 2 === 0 ? 0xff1493 : 0xffd700
-    })
-    const candle = new THREE.Mesh(candleGeometry, candleMaterial)
-    candleGroup.add(candle)
+    let radius, y, color, size
 
-    const wickGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.2, 8)
-    const wickMaterial = new THREE.MeshBasicMaterial({ color: 0x222222 })
-    const wick = new THREE.Mesh(wickGeometry, wickMaterial)
-    wick.position.y = 0.6
-    candleGroup.add(wick)
-
-    const flameGeometry = new THREE.ConeGeometry(0.08, 0.35, 8)
-    const flameMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff8c00,
-      transparent: true,
-      opacity: 1
-    })
-    const flame = new THREE.Mesh(flameGeometry, flameMaterial)
-    flame.position.y = 0.8
-    candleGroup.add(flame)
-
-    const innerFlameGeometry = new THREE.ConeGeometry(0.04, 0.2, 8)
-    const innerFlameMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffff00,
-      transparent: true,
-      opacity: 1
-    })
-    const innerFlame = new THREE.Mesh(innerFlameGeometry, innerFlameMaterial)
-    innerFlame.position.y = 0.75
-    candleGroup.add(innerFlame)
-
-    candleGroup.position.set(pos.x, 5.7, pos.z)
-    candleGroup.userData = {
-      flame,
-      innerFlame,
-      initialY: 5.7,
-      phase: Math.random() * Math.PI * 2
+    if (layer === 0) {
+      const baseRadius = 4
+      radius = baseRadius + spread * 0.8
+      y = 1 + Math.random() * 2.5
+      const colorIdx = Math.floor(Math.random() * 4)
+      color = pinkColors[colorIdx]
+      size = 0.08 + spread * 0.05
+    } else if (layer === 1) {
+      const baseRadius = 2.8
+      radius = baseRadius + spread * 0.6
+      y = 3.2 + Math.random() * 2
+      const colorIdx = Math.floor(Math.random() * 5)
+      color = pinkColors[colorIdx]
+      size = 0.06 + spread * 0.04
+    } else {
+      const baseRadius = 1.6
+      radius = baseRadius + spread * 0.4
+      y = 5 + Math.random() * 1.8
+      const colorIdx = Math.floor(Math.random() * 5)
+      color = pinkColors[colorIdx]
+      size = 0.05 + spread * 0.03
     }
 
-    candles.push(candleGroup)
-    cakeGroup.add(candleGroup)
-  })
-}
+    const idx = i * 3
+    positions[idx] = Math.cos(angle) * radius
+    positions[idx + 1] = y
+    positions[idx + 2] = Math.sin(angle) * radius
 
-const animate = () => {
-  animationId = requestAnimationFrame(animate)
+    colors[idx] = color.r
+    colors[idx + 1] = color.g
+    colors[idx + 2] = color.b
 
-  if (!renderer || !scene || !camera) return
-
-  const time = Date.now() * 0.001
-
-  candles.forEach(candle => {
-    const { flame, innerFlame, initialY, phase } = candle.userData
-    const flicker = Math.sin(time * 12 + phase) * 0.2
-    flame.scale.x = 1 + flicker
-    flame.scale.z = 1 + flicker
-    flame.position.y = 0.8 + Math.sin(time * 10 + phase) * 0.03
-    innerFlame.scale.x = 1 + flicker * 0.5
-    innerFlame.scale.z = 1 + flicker * 0.5
-    candle.position.y = initialY + Math.sin(time * 4 + phase) * 0.02
-  })
-
-  if (isRotating.value && cakeGroup) {
-    cakeGroup.rotation.y += 0.004
+    sizes[i] = size
   }
 
-  renderer.render(scene, camera)
-}
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
 
-const toggleRotation = () => {
-  isRotating.value = !isRotating.value
-}
-
-const celebrate = () => {
-  if (!cakeGroup) return
-
-  candles.forEach(candle => {
-    const { flame } = candle.userData
-    flame.scale.set(3, 4, 3)
-    setTimeout(() => flame.scale.set(1, 1, 1), 500)
+  const material = new THREE.PointsMaterial({
+    size: 0.15,
+    map: sprite,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true
   })
 
-  let jumps = 0
-  const jump = () => {
-    if (jumps >= 3) return
-    const startY = cakeGroup.position.y
-    const startTime = Date.now()
-    const doJump = () => {
-      const elapsed = Date.now() - startTime
-      const progress = Math.min(elapsed / 300, 1)
-      cakeGroup.position.y = startY + Math.sin(progress * Math.PI) * 1
-      if (progress < 1) {
-        requestAnimationFrame(doJump)
-      } else {
-        cakeGroup.position.y = startY
-        jumps++
-        setTimeout(jump, 200)
-      }
+  cakeParticles = new THREE.Points(geometry, material)
+  scene.add(cakeParticles)
+}
+
+const createRingParticles = (sprite) => {
+  const ringCount = 8000
+  const positions = new Float32Array(ringCount * 3)
+  const colors = new Float32Array(ringCount * 3)
+  const sizes = new Float32Array(ringCount)
+
+  for (let i = 0; i < ringCount; i++) {
+    const ring = Math.random() > 0.5 ? 0 : 1
+    const angle = Math.random() * Math.PI * 2
+    const spread = Math.random()
+
+    let radius, y, tiltAngle, color
+    const size = 0.06 + spread * 0.04
+
+    if (ring === 0) {
+      radius = 5.5 + spread * 1
+      tiltAngle = Math.PI / 8
+      y = 3 + Math.sin(angle * 2) * 0.3
+      color = new THREE.Color(0xffffff)
+    } else {
+      radius = 7 + spread * 1.2
+      tiltAngle = -Math.PI / 8
+      y = 3 + Math.cos(angle * 2) * 0.3
+      color = new THREE.Color(0xffffff)
     }
-    doJump()
+
+    const x = Math.cos(angle) * radius
+    const z = Math.sin(angle) * radius
+    const tiltedY = y * Math.cos(tiltAngle) - z * Math.sin(tiltAngle)
+    const tiltedZ = y * Math.sin(tiltAngle) + z * Math.cos(tiltAngle)
+
+    const idx = i * 3
+    positions[idx] = x
+    positions[idx + 1] = tiltedY
+    positions[idx + 2] = tiltedZ
+
+    colors[idx] = color.r
+    colors[idx + 1] = color.g
+    colors[idx + 2] = color.b
+
+    sizes[i] = size
   }
-  jump()
+
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
+
+  const material = new THREE.PointsMaterial({
+    size: 0.12,
+    map: sprite,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.75,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true
+  })
+
+  ringParticles = new THREE.Points(geometry, material)
+  scene.add(ringParticles)
+}
+
+const createCandles = (sprite) => {
+  const particlesPerCandle = 3000
+  const positions = new Float32Array(particlesPerCandle * 3)
+  const colors = new Float32Array(particlesPerCandle * 3)
+  const sizes = new Float32Array(particlesPerCandle)
+  
+  for (let i = 0; i < particlesPerCandle; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const radius = Math.random() * 0.2
+    const y = 6.5 + Math.random() * 1.5
+    
+    const idx = i * 3
+    positions[idx] = Math.cos(angle) * radius
+    positions[idx + 1] = y
+    positions[idx + 2] = Math.sin(angle) * radius
+    
+    // 蜡烛火焰颜色渐变
+    const normalizedY = (y - 6.5) / 1.5
+    let color
+    
+    if (normalizedY > 0.7) {
+      // 火焰顶部 - 亮黄色
+      color = new THREE.Color(0xffff00)
+    } else if (normalizedY > 0.4) {
+      // 火焰中部 - 橙色
+      color = new THREE.Color(0xff8c00)
+    } else {
+      // 火焰底部 - 红色
+      color = new THREE.Color(0xff4500)
+    }
+    
+    colors[idx] = color.r
+    colors[idx + 1] = color.g
+    colors[idx + 2] = color.b
+    
+    sizes[i] = 0.1 + Math.random() * 0.08
+  }
+  
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
+  
+  const material = new THREE.PointsMaterial({
+    size: 0.15,
+    map: sprite,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.92,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true
+  })
+  
+  const candle = new THREE.Points(geometry, material)
+  candle.userData = {
+    baseY: 6.5,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.8
+  }
+  scene.add(candle)
 }
 
 const handleResize = () => {
@@ -305,33 +301,102 @@ const handleResize = () => {
   renderer.setSize(width, height)
 }
 
+const handleWheel = (event) => {
+  event.preventDefault()
+  
+  const delta = event.deltaY > 0 ? 0.5 : -0.5
+  targetCameraZ += delta
+  targetCameraZ = Math.max(6, Math.min(20, targetCameraZ))
+}
+
+const animate = () => {
+  animationId = requestAnimationFrame(animate)
+
+  if (!renderer || !scene || !camera) return
+
+  const time = Date.now() * 0.001
+
+  // 平滑缩放
+  currentCameraZ += (targetCameraZ - currentCameraZ) * 0.1
+  camera.position.z = currentCameraZ
+  camera.lookAt(0, 3, 0)
+
+  if (cakeParticles) {
+    cakeParticles.rotation.y += 0.001
+  }
+
+  if (ringParticles) {
+    ringParticles.rotation.y -= 0.0005
+    ringParticles.rotation.x = Math.sin(time * 0.5) * 0.1
+  }
+
+  // 蜡烛火焰跳动动画
+  scene.children.forEach(child => {
+    if (child.isPoints && child.userData.phase !== undefined) {
+      const positions = child.geometry.attributes.position.array
+      const baseY = child.userData.baseY
+      const phase = child.userData.phase
+      const speed = child.userData.speed
+      
+      for (let i = 0; i < positions.length / 3; i++) {
+        const idx = i * 3
+        const originalY = positions[idx + 1]
+        const flicker = Math.sin(time * 10 * speed + phase + i * 0.1) * 0.1
+        const sway = Math.cos(time * 5 * speed + phase + i * 0.05) * 0.05
+        
+        positions[idx] += sway * 0.02
+        positions[idx + 1] = baseY + (originalY - baseY) * (1 + flicker * 0.3)
+      }
+      
+      child.geometry.attributes.position.needsUpdate = true
+    }
+  })
+
+  renderer.render(scene, camera)
+}
+
 onMounted(() => {
-  console.log('Cake mounted, container:', container.value)
   initScene()
   window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  if (canvas.value) {
+    canvas.value.removeEventListener('wheel', handleWheel)
+  }
   if (animationId) cancelAnimationFrame(animationId)
+  if (cakeParticles) {
+    cakeParticles.geometry.dispose()
+    cakeParticles.material.dispose()
+  }
+  if (ringParticles) {
+    ringParticles.geometry.dispose()
+    ringParticles.material.dispose()
+  }
 })
 </script>
 
-<style>
+<style scoped>
 .cake-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 70vh;
-  min-height: 500px;
-  position: relative;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
 }
 
 .cake-container {
   width: 100%;
   height: 100%;
   position: relative;
+  pointer-events: auto;
 }
 
 canvas {
@@ -340,41 +405,24 @@ canvas {
   display: block;
 }
 
-.cake-controls {
+.gesture-hint {
   position: absolute;
-  bottom: 30px;
+  bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  gap: 20px;
-  z-index: 10;
-}
-
-.control-btn {
-  padding: 14px 28px;
-  font-size: 15px;
-  font-weight: 600;
-  color: white;
-  background: linear-gradient(135deg, #ff6b6b, #ff69b4);
-  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 12px 24px;
   border-radius: 30px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 20px rgba(255, 107, 107, 0.5);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  text-align: center;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
 }
 
-.control-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 25px rgba(255, 107, 107, 0.7);
-}
-
-.celebrate-btn {
-  background: linear-gradient(135deg, #ffd700, #ffaa00);
-  color: #333;
-  box-shadow: 0 4px 20px rgba(255, 215, 0, 0.5);
-}
-
-.celebrate-btn:hover {
-  box-shadow: 0 6px 25px rgba(255, 215, 0, 0.7);
+.gesture-hint p {
+  margin: 0;
 }
 </style>
