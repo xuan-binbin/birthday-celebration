@@ -1,406 +1,531 @@
 <template>
   <div class="home-page">
     <StarsBackground />
-    <Confetti v-if="showBirthday" />
-    <Balloons v-if="showBirthday" />
-    <FloatingNumbers v-if="showBirthday" />
-    <BirthdayMessage v-if="showBirthday" />
+    <div class="startSign">
+      <p id="startButton" class="two button">准备好了，我们开始吧！</p>
+    </div>
 
-    <transition name="fade">
-      <div v-if="showInitialPopup" class="initial-popup-overlay">
-        <div class="initial-popup" @click="openSurprise">
-          <div class="gift-icon">🎁</div>
-          <h2 class="popup-title">您有一份生日惊喜</h2>
-          <p class="popup-subtitle">请签收</p>
-          <div class="tap-hint">
-            <span class="tap-text">点击打开</span>
-            <span class="tap-arrow">👇</span>
-          </div>
+    <div class="container">
+      <div class="one">
+        <h1 class="one">
+          <span data-node-name="greeting">你好啊</span>
+          <span data-node-name="name">轩轩</span>
+        </h1>
+        <p class="two" data-node-name="greetingText">很庆幸能在最美丽的年华遇见最美丽的你</p>
+      </div>
+      <div class="three">
+        <p data-node-name="text1">今天是你的生日啊!!!</p>
+      </div>
+      <div class="four">
+        <div class="text-box">
+          <p class="hbd-chatbox" data-node-name="textInChatBox">非常非常非常诚挚的祝你生日快乐！！！很多很多的快乐……</p>
+          <p class="fake-btn" data-node-name="sendButtonLabel">发送</p>
         </div>
       </div>
-    </transition>
-
-    <transition name="explode">
-      <div v-if="showSurprisePopup" class="surprise-overlay">
-        <div 
-          v-for="(particle, index) in particles" 
-          :key="index"
-          class="particle"
-          :class="{ explode: isExploding }"
-          :style="particle.style"
-        ></div>
-        
-        <transition name="birthday-text">
-          <div v-if="showBirthdayText" class="birthday-text-container">
-            <div class="birthday-text">
-              <span v-for="(char, index) in birthdayChars" :key="index" class="char" :style="{ animationDelay: index * 0.1 + 's' }">
-                {{ char }}
-              </span>
-            </div>
-            <div class="birthday-subtitle">Happy 20th Birthday!</div>
-          </div>
-        </transition>
+      <div class="five">
+        <p class="idea-1" data-node-name="text2">我想给你一个惊喜</p>
+        <p class="idea-2" data-node-name="text3">我认真的想了很久</p>
+        <p class="idea-3">
+          <span data-node-name="text4">我认识到，我想要做一些</span>
+          <strong data-node-name="text4Adjective">特殊的事情</strong>
+        </p>
+        <p class="idea-4" data-node-name="text5Entry">因为，</p>
+        <p class="idea-5">
+          <span data-node-name="text5Content">你对于我来说，很特殊</span>
+          <span class="smiley" data-node-name="smiley">:)</span>
+        </p>
+        <p class="idea-6">
+          <span data-node-name="bigTextPart1">所</span>
+          <span data-node-name="bigTextPart2">以</span>
+        </p>
       </div>
-    </transition>
+      <div class="six">
+        <div class="wish">
+          <h3 class="wish-hbd" data-node-name="wishHeading">生日快乐啊!</h3>
+          <h5 data-node-name="wishText">朱颜长似，头上花枝，岁岁年年。愿君青丝不老，岁岁皆欢。</h5>
+        </div>
+      </div>
+      <div class="seven">
+        <div class="baloons">
+          <div class="balloon" style="left: 5%; background: #bd6ecf;"></div>
+          <div class="balloon" style="left: 15%; background: #7dd175;"></div>
+          <div class="balloon" style="left: 25%; background: #349d8b;"></div>
+          <div class="balloon" style="left: 35%; background: #c66053;"></div>
+          <div class="balloon" style="left: 45%; background: #bfaa40;"></div>
+          <div class="balloon" style="left: 55%; background: #e3bae8;"></div>
+          <div class="balloon" style="left: 65%; background: #8762cb;"></div>
+          <div class="balloon" style="left: 75%; background: #9a90da;"></div>
+          <div class="balloon" style="left: 85%; background: #bd6ecf;"></div>
+          <div class="balloon" style="left: 95%; background: #7dd175;"></div>
+        </div>
+      </div>
+      <div class="eight">
+        <div class="confetti" style="background: #bd6ecf;"></div>
+        <div class="confetti" style="background: #7dd175;"></div>
+        <div class="confetti" style="background: #349d8b;"></div>
+        <div class="confetti" style="background: #c66053;"></div>
+        <div class="confetti" style="background: #bfaa40;"></div>
+        <div class="confetti" style="background: #e3bae8;"></div>
+        <div class="confetti" style="background: #8762cb;"></div>
+        <div class="confetti" style="background: #9a90da;"></div>
+      </div>
+      <div class="nine">
+        <p data-node-name="outroText">我希望你喜欢这个小小的惊喜!</p>
+        <p id="replay" data-node-name="replayText">如果你喜欢的话，可以再看一次哦!或者……</p>
+        <p class="last-smile" data-node-name="outroSmiley">:)</p>
+      </div>
+      <canvas id="fireworksCanvas"></canvas>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
+import gsap from 'gsap'
 import StarsBackground from '../components/StarsBackground.vue'
-import Confetti from '../components/Confetti.vue'
-import Balloons from '../components/Balloons.vue'
-import FloatingNumbers from '../components/FloatingNumbers.vue'
-import BirthdayMessage from '../components/BirthdayMessage.vue'
 
-const showInitialPopup = ref(true)
-const showSurprisePopup = ref(false)
-const isExploding = ref(false)
-const showBirthdayText = ref(false)
-const showBirthday = ref(false)
+let fireworks = []
 
-const birthdayChars = ['生', '日', '快', '乐', '！']
-const particles = ref([])
+const initFireworks = () => {
+  const canvas = document.getElementById('fireworksCanvas')
+  if (!canvas) return
 
-const colors = [
-  '#ff6b6b', '#4ecdc4', '#ffe66d', '#ff69b4',
-  '#00d2d3', '#ff9ff3', '#feca57', '#48dbfb',
-  '#ffd700', '#ff3f6b', '#00ffff', '#ff1493'
-]
+  const ctx = canvas.getContext('2d')
 
-const generateParticles = () => {
-  const count = 60
-  const newParticles = []
-  
-  for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2
-    const distance = 50 + Math.random() * 30
-    
-    newParticles.push({
-      style: {
-        left: '50%',
-        top: '50%',
-        width: Math.random() * 20 + 10 + 'px',
-        height: Math.random() * 20 + 10 + 'px',
-        backgroundColor: colors[Math.floor(Math.random() * colors.length)],
-        borderRadius: Math.random() > 0.5 ? '50%' : Math.random() * 10 + 'px',
-        '--tx': Math.cos(angle) * distance + 'vw',
-        '--ty': Math.sin(angle) * distance + 'vh',
-        '--rotate': Math.random() * 720 - 360 + 'deg',
-        '--scale': Math.random() * 2 + 1,
-        '--delay': Math.random() * 0.3 + 's'
+  function resizeCanvas() {
+    canvas.width = window.innerWidth
+    canvas.height = window.innerHeight
+  }
+  window.addEventListener('resize', resizeCanvas)
+  resizeCanvas()
+
+  class Particle {
+    constructor(x, y, color, angle, speed) {
+      this.x = x
+      this.y = y
+      this.color = color
+      this.angle = angle
+      this.speed = speed
+      this.size = Math.random() * 2 + 1
+      this.alpha = 1
+      this.gravity = 0.02
+    }
+
+    update() {
+      this.x += Math.cos(this.angle) * this.speed
+      this.y += Math.sin(this.angle) * this.speed
+      this.speed *= 0.98
+      this.alpha -= 0.015
+      this.speed -= this.gravity
+    }
+
+    draw() {
+      ctx.globalAlpha = this.alpha
+      ctx.fillStyle = this.color
+      ctx.beginPath()
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+  }
+
+  class Firework {
+    constructor(x, y, particleCount = 50) {
+      this.x = x
+      this.y = y
+      this.particles = []
+      this.colors = ["#ff5733", "#ffbd33", "#33ff57", "#3357ff", "#f033ff"]
+
+      for (let i = 0; i < particleCount; i++) {
+        const angle = Math.random() * Math.PI * 2
+        const speed = Math.random() * 3 + 2
+        const color = this.colors[Math.floor(Math.random() * this.colors.length)]
+        this.particles.push(new Particle(this.x, this.y, color, angle, speed))
+      }
+    }
+
+    update() {
+      this.particles.forEach((p, index) => {
+        p.update()
+        if (p.alpha <= 0) {
+          this.particles.splice(index, 1)
+        }
+      })
+    }
+
+    draw() {
+      this.particles.forEach(p => p.draw())
+    }
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    fireworks.forEach((firework, index) => {
+      firework.update()
+      firework.draw()
+      if (firework.particles.length === 0) {
+        fireworks.splice(index, 1)
       }
     })
+
+    requestAnimationFrame(animate)
   }
-  
-  particles.value = newParticles
+
+  document.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    fireworks.push(new Firework(x, y, 30))
+  })
+
+  animate()
 }
 
-const openSurprise = () => {
-  showInitialPopup.value = false
-  generateParticles()
-  
-  setTimeout(() => {
-    showSurprisePopup.value = true
-  }, 300)
-  
-  setTimeout(() => {
-    isExploding.value = true
-  }, 800)
-  
-  setTimeout(() => {
-    showBirthdayText.value = true
-  }, 1500)
-  
-  setTimeout(() => {
-    showSurprisePopup.value = false
-    showBirthday.value = true
-  }, 3500)
+const animationTimeline = () => {
+  const textBoxChars = document.querySelector(".hbd-chatbox")
+  const hbd = document.querySelector(".wish-hbd")
+
+  if (textBoxChars) {
+    textBoxChars.innerHTML = `<span>${textBoxChars.innerHTML.split("").join("</span><span>")}</span>`
+  }
+  if (hbd) {
+    hbd.innerHTML = `<span>${hbd.innerHTML.split("").join("</span><span>")}</span>`
+  }
+
+  const ideaTextTrans = {
+    opacity: 0,
+    y: -20,
+    rotationX: 5,
+    skewX: "15deg"
+  }
+
+  const ideaTextTransLeave = {
+    opacity: 0,
+    y: 20,
+    rotationY: 5,
+    skewX: "-15deg"
+  }
+
+  const tl = gsap.timeline()
+
+  tl.to(".container", 0.1, { visibility: "visible" })
+    .from(".one", 0.7, { opacity: 0, y: 10 })
+    .from(".container .two", 0.4, { opacity: 0, y: 10 })
+    .to(".one", 0.7, { opacity: 0, y: 10 }, "+=2.5")
+    .to(".container .two", 0.7, { opacity: 0, y: 10 }, "-=1")
+    .from(".three", 0.7, { opacity: 0, y: 10 })
+    .to(".three", 0.7, { opacity: 0, y: 10 }, "+=2")
+    .from(".four", 0.7, { scale: 0.2, opacity: 0 })
+    .from(".fake-btn", 0.3, { scale: 0.2, opacity: 0 })
+    .to(".hbd-chatbox span", { visibility: "visible", stagger: 0.05 })
+    .to(".fake-btn", 0.1, { backgroundColor: "#8FE3B6" })
+    .to(".four", 0.5, { scale: 0.2, opacity: 0, y: -150 }, "+=0.7")
+    .from(".idea-1", 0.7, ideaTextTrans)
+    .to(".idea-1", 0.7, ideaTextTransLeave, "+=1.5")
+    .from(".idea-2", 0.7, ideaTextTrans)
+    .to(".idea-2", 0.7, ideaTextTransLeave, "+=1.5")
+    .from(".idea-3", 0.7, ideaTextTrans)
+    .to(".idea-3 strong", 0.5, { scale: 1.2, x: 10, backgroundColor: "rgb(21, 161, 237)", color: "#fff" })
+    .to(".idea-3", 0.7, ideaTextTransLeave, "+=1.5")
+    .from(".idea-4", 0.7, ideaTextTrans)
+    .to(".idea-4", 0.7, ideaTextTransLeave, "+=1.5")
+    .from(".idea-5", 0.7, { rotationX: 15, rotationZ: -10, skewY: "-5deg", y: 50, z: 10, opacity: 0 }, "+=0.5")
+    .to(".idea-5 .smiley", 0.7, { rotation: 90, x: 8 }, "+=0.4")
+    .to(".idea-5", 0.7, { scale: 0.2, opacity: 0 }, "+=2")
+    .from(".idea-6 span", { scale: 3, opacity: 0, rotation: 15, ease: "expo.out", stagger: 0.2 })
+    .to(".idea-6 span", { scale: 3, opacity: 0, rotation: -15, ease: "expo.out", stagger: 0.2 }, "+=1")
+    .fromTo(".baloons .balloon", { opacity: 0.9, y: 1400 }, { opacity: 1, y: -1000, stagger: 0.2, duration: 2.5 })
+    .from(".six .wish", { scale: 3.5, opacity: 0, x: 25, y: -25, rotationZ: -45, duration: 0.5 }, "-=2")
+    .from(".wish-hbd span", { opacity: 0, y: -50, rotation: 150, skewX: "30deg", ease: "elastic.out(1, 0.5)", stagger: 0.1, duration: 0.7 })
+    .fromTo(".wish-hbd span", { scale: 1.4, rotationY: 150 }, { scale: 1, rotationY: 0, color: "#ff69b4", ease: "expo.out", stagger: 0.1, duration: 0.7 }, "party")
+    .from(".wish h5", { opacity: 0, y: 10, skewX: "-15deg", duration: 0.5 }, "party")
+    .to(".eight .confetti", { visibility: "visible", opacity: 0, scale: 80, repeat: 3, repeatDelay: 1.4, stagger: 0.3, duration: 1.5 })
+    .to(".six", { opacity: 0, y: 30, zIndex: "-1", duration: 0.5 })
+    .from(".nine p", { ...ideaTextTrans, stagger: 1.2, duration: 1 })
+    .to(".last-smile", { rotation: 90, duration: 0.5 }, "+=1")
+
+  const replyBtn = document.getElementById("replay")
+  if (replyBtn) {
+    replyBtn.addEventListener("click", () => {
+      tl.restart()
+    })
+  }
 }
 
 onMounted(() => {
   document.body.style.overflow = 'hidden'
+  initFireworks()
+
+  const startButton = document.getElementById('startButton')
+  if (startButton) {
+    startButton.addEventListener('click', () => {
+      document.querySelector('.startSign').style.display = 'none'
+      animationTimeline()
+    })
+  }
+})
+
+onUnmounted(() => {
+  document.body.style.overflow = ''
 })
 </script>
 
-<style scoped>
+<style>
+html {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  width: 100vw;
+}
+
 .home-page {
   position: relative;
   width: 100%;
-  min-height: 100vh;
-  overflow: hidden;
+  height: 100vh;
 }
 
-.initial-popup-overlay {
+#fireworksCanvas {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(10px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.initial-popup {
-  background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(78, 205, 196, 0.2));
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 30px;
-  padding: 50px 60px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.4s ease;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.initial-popup:hover {
-  transform: scale(1.05);
-  border-color: rgba(255, 215, 0, 0.5);
-  box-shadow: 0 0 60px rgba(255, 215, 0, 0.3);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 30px rgba(255, 107, 107, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 60px rgba(255, 107, 107, 0.5);
-  }
-}
-
-.gift-icon {
-  font-size: 80px;
-  animation: bounce 1s ease-in-out infinite;
-}
-
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-15px); }
-}
-
-.popup-title {
-  font-family: 'Great Vibes', cursive;
-  font-size: 2.5rem;
-  background: linear-gradient(135deg, #ffd700, #ff69b4, #4ecdc4);
-  background-size: 200% 200%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: gradientFlow 3s ease infinite;
-  margin: 20px 0 10px;
-}
-
-@keyframes gradientFlow {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-.popup-subtitle {
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.8);
-  margin: 0;
-}
-
-.tap-hint {
-  margin-top: 25px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.tap-text {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.tap-arrow {
-  font-size: 24px;
-  animation: arrowBounce 1s ease-in-out infinite;
-}
-
-@keyframes arrowBounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(8px); }
-}
-
-.surprise-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.95));
-  z-index: 1001;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.particle {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  transition-delay: var(--delay);
-  opacity: 1;
-}
-
-.particle.explode {
-  transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--rotate)) scale(var(--scale));
-  opacity: 0;
-}
-
-.birthday-text-container {
-  position: absolute;
-  text-align: center;
+  pointer-events: none;
   z-index: 10;
 }
 
-.birthday-text {
+.startSign {
+  position: relative;
+  z-index: 5;
+}
+
+.startSign .button {
+  color: #fff;
+}
+
+.container {
+  height: 100vh;
+  width: 100vw;
+  margin: 0 auto;
+  text-align: center;
+  visibility: hidden;
+  position: relative;
+  overflow: hidden;
+  z-index: 5;
+  color: #fff;
+}
+
+.container > div {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 20vh;
+}
+
+.one {
+  font-size: 4.5rem;
+}
+
+.one > img {
+  vertical-align: middle;
+  margin-bottom: 10px;
+  max-width: 100%;
+  height: auto;
+}
+
+.two {
+  font-size: 1.2rem;
+  font-weight: lighter;
+}
+
+.three {
+  font-size: 3rem;
+}
+
+.four .text-box {
+  width: 600px;
+  margin: 0 auto;
+  border: 3px solid #aaa;
+  border-radius: 5px;
+  padding: 10px;
+  position: relative;
+}
+
+.text-box p {
+  margin: 0;
+  text-align: left;
+}
+
+.text-box span {
+  visibility: hidden;
+}
+
+.text-box .fake-btn {
+  position: absolute;
+  right: 5px;
+  bottom: 2px;
+  color: #fff;
+  background-color: #03C160;
+  padding: 8px 16px;
+  border-radius: 8px;
+}
+
+.five p {
+  font-size: 2rem;
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.idea-3 strong {
+  padding: 3px 5px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.idea-5 {
+  font-size: 4rem;
+}
+
+.idea-5 span,
+.idea-6 span,
+.wish-hbd span {
+  display: inline-block;
+}
+
+.idea-6 span {
+  font-size: 15rem;
+}
+
+.six {
+  position: relative;
+}
+
+.wish-hbd {
+  font-size: 3em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.wish h5 {
+  font-weight: lighter;
+  font-size: 2rem;
+  margin: 10px 0 0;
+}
+
+.nine p {
+  font-size: 2rem;
+  font-weight: lighter;
+}
+
+#replay {
+  z-index: 3;
+  cursor: pointer;
+}
+
+.startSign {
   display: flex;
   justify-content: center;
-  gap: 15px;
-  margin-bottom: 20px;
+  align-items: center;
+  flex-direction: column;
+  margin: 20vh 5vw;
 }
 
-.birthday-text .char {
-  font-family: 'Great Vibes', cursive;
-  font-size: 6rem;
-  font-weight: bold;
-  background: linear-gradient(135deg, #ffd700, #ff69b4, #4ecdc4, #ffd700);
-  background-size: 300% 300%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: charAppear 0.5s ease-out forwards, gradientFlow 2s ease infinite;
-  opacity: 0;
-  transform: scale(0) rotate(-20deg);
-  text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
-  filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8));
+.startSign .button {
+  padding: 1rem 1.6rem;
+  border: 1px solid #03C160;
+  border-radius: 5px;
 }
 
-@keyframes charAppear {
-  0% {
-    opacity: 0;
-    transform: scale(0) rotate(-20deg);
-  }
-  50% {
-    transform: scale(1.3) rotate(10deg);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
-}
-
-.birthday-subtitle {
-  font-family: 'Poppins', sans-serif;
-  font-size: 2rem;
+.startSign .button:hover {
+  background-color: #03C160;
   color: #fff;
-  letter-spacing: 5px;
-  animation: fadeInUp 0.8s ease-out forwards;
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+  padding: 1rem 1.6rem;
+  cursor: pointer;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.balloon {
+  position: absolute;
+  width: 35px;
+  height: 45px;
+  border-radius: 50% 50% 50% 50%;
+  bottom: -100px;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s ease;
+.balloon::before {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 10px solid inherit;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+.balloon::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 50px;
+  background: #ccc;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.explode-enter-active {
-  animation: explodeIn 0.3s ease-out;
+.confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #f00;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  z-index: -1;
 }
 
-.explode-leave-active {
-  animation: explodeOut 0.5s ease-in;
-}
+.confetti:nth-child(1) { top: 7vh; left: 5vw; }
+.confetti:nth-child(2) { top: 23vh; left: 35vw; }
+.confetti:nth-child(3) { top: 33vh; left: 23vw; }
+.confetti:nth-child(4) { top: 43vh; left: 57vw; }
+.confetti:nth-child(5) { top: 68vh; left: 7vw; }
+.confetti:nth-child(6) { top: 42vh; left: 77vw; }
+.confetti:nth-child(7) { top: 68vh; left: 83vw; }
+.confetti:nth-child(8) { top: 86vh; left: 37vw; }
 
-@keyframes explodeIn {
-  from {
-    opacity: 0;
+@media screen and (max-width: 500px) {
+  .container {
+    width: 90%;
   }
-  to {
-    opacity: 1;
+  .four .text-box {
+    width: 90%;
   }
-}
-
-@keyframes explodeOut {
-  from {
-    opacity: 1;
+  .text-box .fake-btn {
+    right: 5px;
+    bottom: -48px;
   }
-  to {
-    opacity: 0;
+  .idea-5 span {
+    display: block;
   }
-}
-
-.birthday-text-enter-active {
-  animation: textIn 0.5s ease-out;
-}
-
-.birthday-text-leave-active {
-  animation: textOut 0.3s ease-in;
-}
-
-@keyframes textIn {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
+  .idea-6 span {
+    font-size: 10rem;
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+  .wish-hbd {
+    font-size: 2.2em;
   }
-}
-
-@keyframes textOut {
-  from {
-    opacity: 1;
+  .wish h5 {
+    font-size: 1.4rem;
   }
-  to {
-    opacity: 0;
-  }
-}
-
-@media (max-width: 768px) {
-  .initial-popup {
-    padding: 40px 30px;
-    margin: 20px;
-  }
-
-  .gift-icon {
-    font-size: 60px;
-  }
-
-  .popup-title {
-    font-size: 2rem;
-  }
-
-  .birthday-text .char {
-    font-size: 3.5rem;
-  }
-
-  .birthday-subtitle {
-    font-size: 1.2rem;
+  .nine p {
+    font-size: 1.5rem;
+    font-weight: lighter;
   }
 }
 </style>

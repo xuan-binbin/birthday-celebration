@@ -8,6 +8,8 @@
       @touchmove.prevent="handleTouchMove"
       @touchend="handleTouchEnd"
     >
+      <StarsBackground />
+      
       <div 
         id="photo-ball" 
         class="photo-container"
@@ -49,6 +51,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
+import StarsBackground from './StarsBackground.vue'
 
 const props = defineProps({
   visible: {
@@ -210,7 +213,7 @@ watch(() => props.visible, (newVal) => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: #000000;
+  background: transparent;
   z-index: 2000;
   overflow: hidden;
   touch-action: none;
@@ -320,6 +323,7 @@ watch(() => props.visible, (newVal) => {
   text-align: center;
   z-index: 3000;
   pointer-events: none;
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
 }
 
 .photo-wall-title h2 {

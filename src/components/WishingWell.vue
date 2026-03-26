@@ -1,8 +1,9 @@
 <template>
   <div class="wish-tree-container">
     <canvas ref="canvas"></canvas>
+    
     <div class="text-blessing">
-      <p>愿你年年岁岁都平安</p>
+      <p>{{ currentBlessing }}</p>
     </div>
 
     <div class="vertical-texts">
@@ -15,6 +16,27 @@
         {{ t }}
       </div>
     </div>
+
+    <div class="control-panel">
+      <div class="gesture-toggle" @click="toggleGesture">
+        <span class="toggle-label">手势控制</span>
+        <div class="toggle-switch" :class="{ active: gestureEnabled }">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
+      <div class="tips" v-if="gestureEnabled">
+        <div class="tip-title">手势说明</div>
+        <div class="tip-item">✊ 握拳 - 聚合许愿树</div>
+        <div class="tip-item">✋ 张手 - 粒子散开</div>
+        <div class="tip-item">👌 捏合 - 聚焦模式</div>
+      </div>
+    </div>
+
+    <div class="webcam-preview" v-show="gestureEnabled && webcamActive">
+      <video ref="webcam" autoplay playsinline></video>
+      <canvas ref="webcamCanvas"></canvas>
+    </div>
+
     <div class="wish-input-area">
       <input
         v-model="wishText"
@@ -31,38 +53,42 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
+import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 
 const CONFIG = {
   TREE: {
-    TRUNK_RADIUS_TOP: 0.2,
-    TRUNK_RADIUS_BOTTOM: 0.35,
-    TRUNK_HEIGHT: 4,
-    TRUNK_SEGMENTS: 8,
-    BRANCH_COUNT: 10,
-    BRANCH_LENGTH: 1.8,
-    LEAF_COLORS: [0x00BFFF, 0x1E90FF, 0x4169E1, 0x00FFFF, 0x5F9EA0],
+    TRUNK_RADIUS_TOP: 0.08,
+    TRUNK_RADIUS_BOTTOM: 0.22,
+    TRUNK_HEIGHT: 4.0,
+    TRUNK_SEGMENTS: 16,
+    BRANCH_COUNT: 20,
+    BRANCH_LENGTH: 2.5,
+    LEAF_COLORS: [0x00FFFF, 0x00D4FF, 0x00AAFF, 0x0088FF, 0x00BFFF, 0x00AADD],
     LEAF_LAYERS: [
-      { height: 4.5, radius: 1.2, leafCount: 600 },
-      { height: 5.2, radius: 2.0, leafCount: 1000 },
-      { height: 5.8, radius: 2.8, leafCount: 1400 },
-      { height: 6.4, radius: 3.2, leafCount: 1600 },
-      { height: 7.0, radius: 2.5, leafCount: 1200 },
-      { height: 7.6, radius: 1.5, leafCount: 800 }
+      { height: 4.5, radius: 2.5, leafCount: 400 },
+      { height: 5.2, radius: 4.0, leafCount: 800 },
+      { height: 5.9, radius: 5.5, leafCount: 1200 },
+      { height: 6.5, radius: 6.5, leafCount: 1600 },
+      { height: 7.0, radius: 7.0, leafCount: 1800 },
+      { height: 7.4, radius: 6.5, leafCount: 1400 },
+      { height: 7.8, radius: 5.5, leafCount: 1000 },
+      { height: 8.2, radius: 4.0, leafCount: 600 }
     ]
   },
   PARTICLES: {
-    GLOW_COUNT: 2000,
-    FLOAT_COUNT: 400,
+    GLOW_COUNT: 2500,
+    FLOAT_COUNT: 300,
     DANDELION_COUNT: 15,
     DANDELION_SEED_COUNT: 30,
-    WISH_PARTICLE_COUNT: 100
+    WISH_PARTICLE_COUNT: 100,
+    STAR_COUNT: 500
   },
   CAMERA: {
     FOV: 50,
     NEAR: 0.1,
     FAR: 1000,
-    INITIAL_POSITION: { x: 0, y: 3, z: 12 },
-    LOOK_AT: { x: 0, y: 3, z: 0 }
+    INITIAL_POSITION: { x: 0, y: 3.5, z: 14 },
+    LOOK_AT: { x: 0, y: 3.5, z: 0 }
   },
   ANIMATION: {
     TREE_ROTATION_SPEED: 0.001,
@@ -72,15 +98,27 @@ const CONFIG = {
   }
 }
 
+const BLESSINGS = [
+  '愿你年年岁岁都平安',
+  '愿所有美好如期而至',
+  '愿你眼里有光心中有爱',
+  '愿岁月静好现世安稳',
+  '愿你被世界温柔以待'
+]
+
 const canvas = ref(null)
+const webcam = ref(null)
+const webcamCanvas = ref(null)
 const wishText = ref('')
+const gestureEnabled = ref(false)
+const webcamActive = ref(false)
+const currentBlessing = ref(BLESSINGS[0])
 
 const verticalTexts = ref([
   '岁月静好',
   '愿你安好',
-  '相思入骨',
-  '海誓山盟',
-  '白首不离'
+  '天天开心',
+  '无忧无虑',
 ])
 
 let scene = null
@@ -88,14 +126,135 @@ let camera = null
 let renderer = null
 let clock = null
 let animationId = null
+let handLandmarker = null
+let webcamCtx = null
+let lastVideoTime = -1
 
 const treeParticles = []
 const leafLayers = []
 const floatingParticles = []
 const wishParticles = []
 const dandelions = []
-
 const disposables = []
+
+const STATE = {
+  mode: 'NORMAL',
+  hand: { detected: false, x: 0, y: 0 },
+  rotation: { x: 0, y: 0 },
+  zoom: 1
+}
+
+let isDragging = false
+let previousMousePosition = { x: 0, y: 0 }
+
+const toggleGesture = async () => {
+  gestureEnabled.value = !gestureEnabled.value
+  if (gestureEnabled.value && !handLandmarker) {
+    await initMediaPipe()
+  }
+}
+
+const initMediaPipe = async () => {
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+    )
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'VIDEO',
+      numHands: 1
+    })
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      webcam.value.srcObject = stream
+      webcamActive.value = true
+      webcam.value.addEventListener('loadeddata', predictWebcam)
+    }
+  } catch (error) {
+    console.error('Failed to initialize MediaPipe:', error)
+    gestureEnabled.value = false
+  }
+}
+
+const predictWebcam = async () => {
+  if (!gestureEnabled.value || !webcam.value || !handLandmarker) {
+    requestAnimationFrame(predictWebcam)
+    return
+  }
+
+  if (webcam.value.currentTime !== lastVideoTime) {
+    lastVideoTime = webcam.value.currentTime
+
+    webcamCanvas.value.width = webcam.value.videoWidth
+    webcamCanvas.value.height = webcam.value.videoHeight
+    webcamCtx = webcamCanvas.value.getContext('2d')
+    webcamCtx.clearRect(0, 0, webcamCanvas.value.width, webcamCanvas.value.height)
+    webcamCtx.drawImage(webcam.value, 0, 0)
+
+    const result = handLandmarker.detectForVideo(webcam.value, performance.now())
+
+    if (result.landmarks.length > 0) {
+      STATE.hand.detected = true
+      const landmarks = result.landmarks[0]
+      STATE.hand.x = (landmarks[9].x - 0.5) * 2
+      STATE.hand.y = (landmarks[9].y - 0.5) * 2
+
+      const isIndexUp = landmarks[8].y < landmarks[6].y
+      const isMiddleUp = landmarks[12].y < landmarks[10].y
+      const isRingUp = landmarks[16].y < landmarks[14].y
+      const isPinkyUp = landmarks[20].y < landmarks[18].y
+      const pinchDist = Math.hypot(landmarks[8].x - landmarks[4].x, landmarks[8].y - landmarks[4].y)
+      const isPinch = pinchDist < 0.1
+      const isFist = !isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp
+      const isOpenHand = isIndexUp && isMiddleUp && isRingUp && isPinkyUp
+
+      console.log('Hand detected:', { isIndexUp, isMiddleUp, isRingUp, isPinkyUp, pinchDist: pinchDist.toFixed(2), isPinch, isFist, isOpenHand })
+
+      if (isPinch && !isFist) {
+        STATE.mode = 'FOCUS'
+        console.log('Mode: FOCUS')
+      } else if (isFist) {
+        STATE.mode = 'GATHER'
+        console.log('Mode: GATHER')
+      } else if (isOpenHand) {
+        STATE.mode = 'SCATTER'
+        console.log('Mode: SCATTER')
+      } else {
+        STATE.mode = 'NORMAL'
+        console.log('Mode: NORMAL')
+      }
+
+      drawHand(landmarks, webcamCtx)
+    } else {
+      STATE.hand.detected = false
+      STATE.mode = 'NORMAL'
+    }
+  }
+
+  requestAnimationFrame(predictWebcam)
+}
+
+const drawHand = (landmarks, ctx) => {
+  ctx.strokeStyle = '#00ffcc'
+  ctx.lineWidth = 2
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+    [13,17],[17,18],[18,19],[19,20],[0,17]
+  ]
+  for (let c of connections) {
+    const s = landmarks[c[0]]
+    const e = landmarks[c[1]]
+    ctx.beginPath()
+    ctx.moveTo(s.x * webcamCanvas.value.width, s.y * webcamCanvas.value.height)
+    ctx.lineTo(e.x * webcamCanvas.value.width, e.y * webcamCanvas.value.height)
+    ctx.stroke()
+  }
+}
 
 const createTrunk = () => {
   const geometry = new THREE.CylinderGeometry(
@@ -105,48 +264,104 @@ const createTrunk = () => {
     CONFIG.TREE.TRUNK_SEGMENTS
   )
   const material = new THREE.MeshBasicMaterial({
-    color: 0x0a3d5c,
+    color: 0x00DDFF,
     transparent: true,
-    opacity: 0.9
+    opacity: 0.6,
+    emissive: 0x00DDFF,
+    emissiveIntensity: 0.9
   })
   const trunk = new THREE.Mesh(geometry, material)
-  trunk.position.y = 2
+  trunk.position.y = CONFIG.TREE.TRUNK_HEIGHT / 2
+  
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x00FFFF,
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.BackSide
+  })
+  const glowMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      CONFIG.TREE.TRUNK_RADIUS_TOP * 2,
+      CONFIG.TREE.TRUNK_RADIUS_BOTTOM * 2,
+      CONFIG.TREE.TRUNK_HEIGHT * 0.95,
+      CONFIG.TREE.TRUNK_SEGMENTS
+    ),
+    glowMaterial
+  )
+  glowMesh.position.y = CONFIG.TREE.TRUNK_HEIGHT / 2
+  trunk.add(glowMesh)
+  
   scene.add(trunk)
   disposables.push({ geometry, material })
+  disposables.push({ geometry: glowMesh.geometry, material: glowMaterial })
 }
 
 const createBranches = () => {
-  for (let i = 0; i < CONFIG.TREE.BRANCH_COUNT; i++) {
-    const geometry = new THREE.CylinderGeometry(0.04, 0.07, CONFIG.TREE.BRANCH_LENGTH, 6)
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x0d4a70,
-      transparent: true,
-      opacity: 0.75
-    })
-    const branch = new THREE.Mesh(geometry, material)
-
-    const angle = (i / CONFIG.TREE.BRANCH_COUNT) * Math.PI * 2
-    const height = 2.8 + (i % 3) * 0.4
-    const branchLength = 0.6 + Math.random() * 0.3
-
-    branch.position.set(
-      Math.cos(angle) * branchLength,
+  const mainBranches = []
+  
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2
+    const height = 3.0 + Math.random() * 0.5
+    const branchLength = CONFIG.TREE.BRANCH_LENGTH * 0.8
+    
+    const mainBranch = createBranchSegment(branchLength, 0.06, 0.09, height, angle)
+    mainBranch.rotation.z = Math.cos(angle) * 0.6
+    mainBranch.rotation.x = Math.sin(angle) * 0.6
+    mainBranch.rotation.y = -angle
+    mainBranch.rotateX(-Math.PI / 3)
+    
+    mainBranches.push({
+      angle,
       height,
-      Math.sin(angle) * branchLength
-    )
-    branch.rotation.z = Math.cos(angle) * 0.5
-    branch.rotation.x = Math.sin(angle) * 0.5
-    branch.rotation.y = -angle
-
-    scene.add(branch)
-    disposables.push({ geometry, material })
+      branch: mainBranch
+    })
+    
+    scene.add(mainBranch)
   }
+  
+  for (let i = 0; i < CONFIG.TREE.BRANCH_COUNT - 8; i++) {
+    const baseBranch = mainBranches[i % mainBranches.length]
+    const angle = baseBranch.angle + (Math.random() - 0.5) * 0.5
+    const height = baseBranch.height + 0.8 + Math.random() * 0.5
+    const branchLength = CONFIG.TREE.BRANCH_LENGTH * (0.4 + Math.random() * 0.3)
+    
+    const subBranch = createBranchSegment(branchLength, 0.025, 0.05, height, angle)
+    subBranch.rotation.z = Math.cos(angle) * 0.5 + (Math.random() - 0.5) * 0.3
+    subBranch.rotation.x = Math.sin(angle) * 0.5 + (Math.random() - 0.5) * 0.3
+    subBranch.rotation.y = -angle
+    subBranch.rotateX(-Math.PI / 2.5 - Math.random() * Math.PI / 6)
+    
+    scene.add(subBranch)
+  }
+}
+
+const createBranchSegment = (length, topRadius, bottomRadius, baseHeight, angle) => {
+  const geometry = new THREE.CylinderGeometry(topRadius, bottomRadius, length, 8)
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x00CCFF,
+    transparent: true,
+    opacity: 0.5,
+    emissive: 0x00CCFF,
+    emissiveIntensity: 0.7
+  })
+  const branch = new THREE.Mesh(geometry, material)
+  
+  const branchRadius = 0.5 + Math.random() * 0.3
+  branch.position.set(
+    Math.cos(angle) * branchRadius,
+    baseHeight,
+    Math.sin(angle) * branchRadius
+  )
+  
+  disposables.push({ geometry, material })
+  return branch
 }
 
 const createLeafLayer = (config, layerIndex) => {
   const positions = new Float32Array(config.leafCount * 3)
   const colors = new Float32Array(config.leafCount * 3)
   const originalPositions = new Float32Array(config.leafCount * 3)
+  const scatterPositions = new Float32Array(config.leafCount * 3)
 
   for (let i = 0; i < config.leafCount; i++) {
     const theta = Math.random() * Math.PI * 2
@@ -154,7 +369,7 @@ const createLeafLayer = (config, layerIndex) => {
     const r = config.radius * Math.cbrt(Math.random())
 
     const x = r * Math.sin(phi) * Math.cos(theta)
-    const y = r * Math.cos(phi) * 0.6 + config.height
+    const y = r * Math.cos(phi) * 0.4 + config.height
     const z = r * Math.sin(phi) * Math.sin(theta)
 
     positions[i * 3] = x
@@ -164,10 +379,18 @@ const createLeafLayer = (config, layerIndex) => {
     originalPositions[i * 3 + 1] = y
     originalPositions[i * 3 + 2] = z
 
+    const scatterR = 12 + Math.random() * 10
+    const scatterTheta = Math.random() * Math.PI * 2
+    const scatterPhi = Math.acos(2 * Math.random() - 1)
+    scatterPositions[i * 3] = scatterR * Math.sin(scatterPhi) * Math.cos(scatterTheta)
+    scatterPositions[i * 3 + 1] = scatterR * Math.sin(scatterPhi) * Math.sin(scatterTheta) * 0.3 + 5
+    scatterPositions[i * 3 + 2] = scatterR * Math.cos(scatterPhi)
+
     const color = new THREE.Color(CONFIG.TREE.LEAF_COLORS[Math.floor(Math.random() * CONFIG.TREE.LEAF_COLORS.length)])
-    colors[i * 3] = color.r * 0.85
-    colors[i * 3 + 1] = color.g * 0.9
-    colors[i * 3 + 2] = color.b * 0.95
+    const brightness = 0.7 + Math.random() * 0.3
+    colors[i * 3] = color.r * brightness
+    colors[i * 3 + 1] = color.g * brightness
+    colors[i * 3 + 2] = color.b * brightness
   }
 
   const geometry = new THREE.BufferGeometry()
@@ -175,10 +398,10 @@ const createLeafLayer = (config, layerIndex) => {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
 
   const material = new THREE.PointsMaterial({
-    size: 0.05,
+    size: 0.07,
     vertexColors: true,
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.95,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     sizeAttenuation: true
@@ -189,6 +412,7 @@ const createLeafLayer = (config, layerIndex) => {
     type: 'leaves',
     layer: layerIndex,
     originalPositions,
+    scatterPositions,
     layerHeight: config.height,
     layerRadius: config.radius
   }
@@ -206,10 +430,10 @@ const createGlowParticles = () => {
   for (let i = 0; i < count; i++) {
     const theta = Math.random() * Math.PI * 2
     const phi = Math.random() * Math.PI
-    const radius = 3 + Math.random() * 2
+    const radius = 4 + Math.random() * 3
 
     positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta)
-    positions[i * 3 + 1] = radius * Math.cos(phi) * 0.7 + 6
+    positions[i * 3 + 1] = radius * Math.cos(phi) * 0.7 + 7
     positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta)
     phases[i] = Math.random() * Math.PI * 2
   }
@@ -219,10 +443,10 @@ const createGlowParticles = () => {
   geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1))
 
   const material = new THREE.PointsMaterial({
-    size: 0.12,
+    size: 0.15,
     color: 0x00FFFF,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.95,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     sizeAttenuation: true
@@ -244,6 +468,39 @@ const createWishTree = () => {
   })
 
   createGlowParticles()
+  createBackgroundStars()
+}
+
+const createBackgroundStars = () => {
+  const count = CONFIG.PARTICLES.STAR_COUNT
+  const positions = new Float32Array(count * 3)
+  const phases = new Float32Array(count)
+
+  for (let i = 0; i < count; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 50
+    positions[i * 3 + 1] = Math.random() * 30 - 5
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 50 - 20
+    phases[i] = Math.random() * Math.PI * 2
+  }
+
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1))
+
+  const material = new THREE.PointsMaterial({
+    size: 0.05,
+    color: 0x00AADD,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true
+  })
+
+  const stars = new THREE.Points(geometry, material)
+  stars.userData = { type: 'stars', phases }
+  scene.add(stars)
+  disposables.push({ geometry, material })
 }
 
 const createFloatingParticles = () => {
@@ -253,9 +510,9 @@ const createFloatingParticles = () => {
   const speeds = new Float32Array(count)
 
   for (let i = 0; i < count; i++) {
-    positions[i * 3] = (Math.random() - 0.5) * 20
-    positions[i * 3 + 1] = Math.random() * 15 - 3
-    positions[i * 3 + 2] = (Math.random() - 0.5) * 10
+    positions[i * 3] = (Math.random() - 0.5) * 25
+    positions[i * 3 + 1] = Math.random() * 20 - 3
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 12
     phases[i] = Math.random() * Math.PI * 2
     speeds[i] = 0.5 + Math.random() * 0.5
   }
@@ -266,10 +523,10 @@ const createFloatingParticles = () => {
   geometry.setAttribute('speed', new THREE.BufferAttribute(speeds, 1))
 
   const material = new THREE.PointsMaterial({
-    size: 0.1,
-    color: 0xADD8E6,
+    size: 0.12,
+    color: 0x00FFFF,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.7,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     sizeAttenuation: true
@@ -401,17 +658,39 @@ const addWish = () => {
   wishText.value = ''
 }
 
-const updateLeafLayers = (time) => {
+const updateLeafLayers = (time, dt) => {
   leafLayers.forEach((leaves) => {
     const positions = leaves.geometry.attributes.position.array
     const originalPositions = leaves.userData.originalPositions
+    const scatterPositions = leaves.userData.scatterPositions
 
     for (let i = 0; i < positions.length / 3; i++) {
       const idx = i * 3
+      let targetX, targetY, targetZ
+
+      if (STATE.mode === 'GATHER' || STATE.mode === 'NORMAL') {
+        targetX = originalPositions[idx]
+        targetY = originalPositions[idx + 1]
+        targetZ = originalPositions[idx + 2]
+      } else if (STATE.mode === 'SCATTER') {
+        targetX = scatterPositions[idx]
+        targetY = scatterPositions[idx + 1]
+        targetZ = scatterPositions[idx + 2]
+      } else if (STATE.mode === 'FOCUS') {
+        const focusScale = 0.3
+        targetX = originalPositions[idx] * focusScale
+        targetY = originalPositions[idx + 1] * focusScale + 5
+        targetZ = originalPositions[idx + 2] * focusScale
+      }
+
+      positions[idx] += (targetX - positions[idx]) * 3 * dt
+      positions[idx + 1] += (targetY - positions[idx + 1]) * 3 * dt
+      positions[idx + 2] += (targetZ - positions[idx + 2]) * 3 * dt
+
       const breathe = Math.sin(time * 0.001 + i * 0.1) * 0.05
-      positions[idx] = originalPositions[idx] * (1 + breathe * 0.1)
-      positions[idx + 1] = originalPositions[idx + 1] + breathe
-      positions[idx + 2] = originalPositions[idx + 2] * (1 + breathe * 0.1)
+      positions[idx] *= (1 + breathe * 0.1)
+      positions[idx + 1] += breathe
+      positions[idx + 2] *= (1 + breathe * 0.1)
     }
     leaves.geometry.attributes.position.needsUpdate = true
   })
@@ -421,6 +700,17 @@ const updateGlowParticles = (time) => {
   treeParticles.forEach((particle) => {
     if (particle.userData.type === 'glow') {
       particle.rotation.y -= CONFIG.ANIMATION.GLOW_ROTATION_SPEED
+    }
+    if (particle.userData.type === 'stars') {
+      const positions = particle.geometry.attributes.position.array
+      const phases = particle.userData.phases
+      for (let i = 0; i < positions.length / 3; i++) {
+        const idx = i * 3
+        const twinkle = Math.sin(time * 0.003 + phases[i]) * 0.3 + 0.7
+        positions[idx + 1] += Math.sin(time * 0.001 + phases[i]) * 0.001
+      }
+      particle.geometry.attributes.position.needsUpdate = true
+      particle.material.opacity = 0.4 + Math.sin(time * 0.002) * 0.2
     }
   })
 }
@@ -483,17 +773,86 @@ const animate = () => {
   if (!renderer || !scene || !camera) return
 
   const time = clock.getElapsedTime() * 1000
+  const dt = clock.getDelta()
 
-  updateLeafLayers(time)
+  updateLeafLayers(time, dt)
   updateGlowParticles(time)
   updateFloatingParticles(time)
   updateDandelions(time)
   updateWishParticles(time)
 
+  if (STATE.hand.detected && gestureEnabled.value) {
+    const sensitivity = 0.005
+    STATE.rotation.y = STATE.hand.x * 2
+    STATE.rotation.x = STATE.hand.y * 1
+    scene.rotation.y += (STATE.rotation.y - scene.rotation.y) * 0.05
+    scene.rotation.x += (STATE.rotation.x - scene.rotation.x) * 0.05
+    scene.rotation.x = Math.max(-0.5, Math.min(0.5, scene.rotation.x))
+  } else if (!isDragging) {
+    scene.rotation.y += CONFIG.ANIMATION.TREE_ROTATION_SPEED
+    scene.rotation.x = THREE.MathUtils.lerp(scene.rotation.x, 0, 2 * dt)
+  }
+
+  const targetZoom = STATE.mode === 'FOCUS' ? 0.6 : 1
+  STATE.zoom = THREE.MathUtils.lerp(STATE.zoom, targetZoom, 2 * dt)
+  camera.position.z = CONFIG.CAMERA.INITIAL_POSITION.z * STATE.zoom
+
   camera.position.x = Math.sin(time * CONFIG.ANIMATION.CAMERA_SWAY_SPEED) * CONFIG.ANIMATION.CAMERA_SWAY_AMOUNT
   camera.lookAt(CONFIG.CAMERA.LOOK_AT.x, CONFIG.CAMERA.LOOK_AT.y, CONFIG.CAMERA.LOOK_AT.z)
 
   renderer.render(scene, camera)
+}
+
+const setupMouseControls = () => {
+  const onPointerDown = (x, y) => {
+    isDragging = true
+    previousMousePosition = { x, y }
+  }
+
+  const onPointerMove = (x, y) => {
+    if (!isDragging) return
+
+    const deltaMove = {
+      x: x - previousMousePosition.x,
+      y: y - previousMousePosition.y
+    }
+
+    if (!STATE.hand.detected || !gestureEnabled.value) {
+      const sensitivity = 0.005
+      scene.rotation.y += deltaMove.x * sensitivity
+      scene.rotation.x += deltaMove.y * sensitivity
+      scene.rotation.x = Math.max(-0.5, Math.min(0.5, scene.rotation.x))
+    }
+
+    previousMousePosition = { x, y }
+  }
+
+  const onPointerUp = () => {
+    isDragging = false
+  }
+
+  const onWheel = (e) => {
+    e.preventDefault()
+    const zoomSpeed = 0.001
+    STATE.zoom = Math.max(0.5, Math.min(2, STATE.zoom + e.deltaY * zoomSpeed))
+    camera.position.z = CONFIG.CAMERA.INITIAL_POSITION.z * STATE.zoom
+  }
+
+  canvas.value.addEventListener('mousedown', (e) => onPointerDown(e.clientX, e.clientY))
+  window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY))
+  window.addEventListener('mouseup', onPointerUp)
+
+  canvas.value.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) onPointerDown(e.touches[0].clientX, e.touches[0].clientY)
+  }, { passive: false })
+
+  window.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1) onPointerMove(e.touches[0].clientX, e.touches[0].clientY)
+  }, { passive: false })
+
+  window.addEventListener('touchend', onPointerUp)
+
+  canvas.value.addEventListener('wheel', onWheel, { passive: false })
 }
 
 const initScene = () => {
@@ -531,7 +890,13 @@ const initScene = () => {
   createWishTree()
   createFloatingParticles()
   createDandelions()
+  setupMouseControls()
   animate()
+
+  setInterval(() => {
+    const idx = Math.floor(Math.random() * BLESSINGS.length)
+    currentBlessing.value = BLESSINGS[idx]
+  }, 5000)
 }
 
 const handleResize = () => {
@@ -596,7 +961,6 @@ canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
-  pointer-events: none;
 }
 
 .text-blessing {
@@ -635,9 +999,115 @@ canvas {
   }
 }
 
+.control-panel {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 150;
+}
+
+.gesture-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  background: rgba(0, 30, 60, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.gesture-toggle:hover {
+  border-color: #00FFFF;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+}
+
+.toggle-label {
+  color: #fff;
+  font-size: 14px;
+}
+
+.toggle-switch {
+  width: 40px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.toggle-switch.active {
+  background: #00FFFF;
+}
+
+.toggle-knob {
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all 0.3s ease;
+}
+
+.toggle-switch.active .toggle-knob {
+  left: 22px;
+}
+
+.tips {
+  margin-top: 10px;
+  padding: 10px 15px;
+  background: rgba(0, 30, 60, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tip-title {
+  color: #00FFFF;
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+  padding-bottom: 5px;
+}
+
+.tip-item {
+  margin: 5px 0;
+}
+
+.webcam-preview {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 160px;
+  height: 120px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 150;
+  background: #000;
+}
+
+.webcam-preview video {
+  display: none;
+}
+
+.webcam-preview canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
 .wish-input-area {
   position: absolute;
-  bottom: 100px;
+  bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -689,7 +1159,7 @@ canvas {
   .wish-input-area {
     flex-direction: column;
     align-items: center;
-    bottom: 80px;
+    bottom: 100px;
   }
 
   .wish-input {
@@ -698,6 +1168,11 @@ canvas {
 
   .text-blessing p {
     font-size: 2rem;
+  }
+
+  .webcam-preview {
+    width: 120px;
+    height: 90px;
   }
 }
 
